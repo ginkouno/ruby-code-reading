@@ -1,0 +1,184 @@
+= # arrayのsortについて
+[2019-06-04 23:34]
+# arrayのsortについて
+
+Arrayの.sort methodについてコードを読んでいく。
+
+以下に、簡単なArray#sortを使ったsampleを用意した。
+最終的にはこのソースコードがどのように内部で実現されているのかを見ていく。
+
+```
+list = Array.new #(1)
+
+list << 3
+list << 1
+list << 2
+
+puts list.sort
+```
+
+# Array Classのinstanceの生成
+
+まず、(1)の
+```
+list = Array.new
+```
+から考えたい。
+
+`Array.new` によってArray Classのinstanceが生成されるが、生成されたinstanceがどのようにmemoryに確保されるかを見てみよう。
+array.cというfileがあり、この中にArrayクラスの実装がありそうだなと目星をつける。
+早速中身を見ると、
+
+```
+void
+Init_Array(void)
+{
+#undef rb_intern
+#define rb_intern(str) rb_intern_const(str)
+
+    rb_cArray  = rb_define_class("Array", rb_cObject);
+    rb_include_module(rb_cArray, rb_mEnumerable);
+
+    rb_define_method(rb_cArray, "second", ary_second, 0);
+
+    ... 中略 ...
+    rb_define_method(rb_cArray, "sort", rb_ary_sort, 0);
+```
+
+一番下の方に `Init_Array()` という関数が定義されている。いかにもArrayを初期化してくれそうだ。
+その中には、rb_define_method() という関数の呼び出しが並んでいる。
+
+rb_define_method()はmethodを定義するための関数。
+第一引数のrb_cArrayには、Arrayクラスのインスタンスオブジェクトが渡される。
+第二引数には定義したいmethod名が渡され、
+第三引数には処理を実際に行う関数が指定される。
+第四引数には定義されるmethodに渡される引数の数が指定される。 
+
+つまり、第二引数で定義されている文字列がArrayにあるmethodであると言えるわけだが、
+この中には`new`の定義は存在しない。
+ArrayはObjectClassを継承したものであり、`new` methodはそちらに定義されていると考えられる。
+
+それではObject Classのコードを読んでみよう。
+
+object.cというfileがあるので、中身を見てみる。
+
+Arrayと同じく`Init_Object()`という関数を探す。あった。
+```
+void
+Init_Object(void)
+{
+    id_dig = rb_intern_const("dig");
+    InitVM(Object);
+}
+
+```
+
+Arrayの場合は`rb_define_method()`の定義が列を成していたが、今回は2行しかない。
+`InitVM()`が気になる。
+ruby.h の中を参照すると、
+```
+#define InitVM(ext) {void InitVM_##ext(void);InitVM_##ext();}
+```
+マクロが定義されている。
+##はトークン連結演算子と呼ばれる機能で、左辺の定義部のextが、右辺の##extと置き換えられる。
+なので、前述のInitVM(Object) は、{ void InitVM_Object(void);InitVM_Object() }に置き換えられることになる。
+つまり、InitVM_Objectを宣言し、その直後にそれを呼んでいるということになる。
+
+ではInitVM_Object()を見てみよう。
+object.cの中に定義されている。
+```
+void
+InitVM_Object(void)
+{
+    Init_class_hierarchy();
+
+```
+最初に気になる関数を呼んでいる。Classの継承ツリーを初期化していそうな名前だ。
+おそらくそのとおりなのだろう...と一旦脇に置き、もともとの目的であった `new` を探す。j
+
+```
+void
+InitVM_Object(void)
+{
+    Init_class_hierarchy();
+
+.. 中略 ..
+
+    rb_define_method(rb_cClass, "allocate", rb_class_alloc, 0);
+    rb_define_method(rb_cClass, "new", rb_class_s_new, -1);
+    rb_define_method(rb_cClass, "initialize", rb_class_initialize, -1);
+```
+それらしいものが見つかった。
+`new`は、rb_class_s_new 関数を呼んでいるようだ。
+早速探して中身を見てみよう。
+
+```
+static VALUE
+rb_class_s_new(int argc, const VALUE *argv, VALUE klass)
+{
+    VALUE obj;
+
+    obj = rb_class_alloc(klass);
+    rb_obj_call_init(obj, argc, argv);
+
+    return obj;
+}
+```
+まずVALUE型で変数objを定義している。
+VALUE型は、以下のように定義されている。
+```
+#if defined HAVE_UINTPTR_T && 0
+typedef uintptr_t VALUE;
+typedef uintptr_t ID;
+# define SIGNED_VALUE intptr_t
+# define SIZEOF_VALUE SIZEOF_UINTPTR_T
+# undef PRI_VALUE_PREFIX
+#elif SIZEOF_LONG == SIZEOF_VOIDP
+typedef unsigned long VALUE;
+typedef unsigned long ID;
+```
+
+HAVE_UINTPTR_T && 0
+
+
+
+
+
+
+# listへのinstanceの代入
+
+# listへの
+
+# sort methodの実行
+
+# putsの実施
+
+rubyのsrc codeの展開方法は、rhcのリポジトリを読むと良い。
+展開すると、array.cというfileがあり、この中にArrayクラスの実装がありそうだなと目星をつける。
+
+早速中身を見ると、
+
+```
+void
+Init_Array(void)
+{
+#undef rb_intern
+#define rb_intern(str) rb_intern_const(str)
+
+    rb_cArray  = rb_define_class("Array", rb_cObject);
+    rb_include_module(rb_cArray, rb_mEnumerable);
+
+    rb_define_method(rb_cArray, "second", ary_second, 0);
+
+    ... 中略 ...
+    rb_define_method(rb_cArray, "sort", rb_ary_sort, 0);
+```
+
+一番下の方に `Init_Array()` という関数が定義されている。
+その中に rb_define_method() が並んでいる。
+rb_define_method()はmethodを定義するための関数。
+第一引数のrb_cArrayには、Arrayクラスのインスタンスオブジェクトが渡される。
+第二引数には定義したいmethod名が渡され、
+第三引数には処理を実際に行う関数が指定される。
+第四引数には定義されるmethodに渡される引数の数が指定される。 
+
