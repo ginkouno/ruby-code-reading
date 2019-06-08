@@ -86,6 +86,7 @@ ruby.h の中を参照すると、
 
 ではInitVM_Object()を見てみよう。
 object.cの中に定義されている。
+object.c
 ```
 void
 InitVM_Object(void)
@@ -94,8 +95,9 @@ InitVM_Object(void)
 
 ```
 最初に気になる関数を呼んでいる。Classの継承ツリーを初期化していそうな名前だ。
-おそらくそのとおりなのだろう...と一旦脇に置き、もともとの目的であった `new` を探す。j
+おそらくそのとおりなのだろう...と一旦脇に置き、もともとの目的であった `new` を探す。
 
+object.c
 ```
 void
 InitVM_Object(void)
@@ -112,6 +114,7 @@ InitVM_Object(void)
 `new`は、rb_class_s_new 関数を呼んでいるようだ。
 早速探して中身を見てみよう。
 
+object.c
 ```
 static VALUE
 rb_class_s_new(int argc, const VALUE *argv, VALUE klass)
@@ -137,8 +140,38 @@ typedef uintptr_t ID;
 typedef unsigned long VALUE;
 typedef unsigned long ID;
 ```
+ここでは処理系によって、uintptr_t型があるかどうか、またSIZEOF_LONGの長さがどうなっているか確認の上、VALUE型を定義している。
 
-HAVE_UINTPTR_T && 0
+rb_class_allocは何を返すのだろう。
+```
+static VALUE
+rb_class_alloc(VALUE klass)
+{
+    VALUE obj;
+    rb_alloc_func_t allocator;
+
+    if (RCLASS_SUPER(klass) == 0 && klass != rb_cBasicObject) {
+	rb_raise(rb_eTypeError, "can't instantiate uninitialized class");
+    }
+    if (FL_TEST(klass, FL_SINGLETON)) {
+	rb_raise(rb_eTypeError, "can't create instance of singleton class");
+    }
+    allocator = rb_get_alloc_func(klass);
+    if (!allocator) {
+	rb_undefined_alloc(klass);
+    }
+
+    RUBY_DTRACE_CREATE_HOOK(OBJECT, rb_class2name(klass));
+
+    obj = (*allocator)(klass);
+
+    if (rb_obj_class(obj) != rb_class_real(klass)) {
+	rb_raise(rb_eTypeError, "wrong instance allocation");
+    }
+    return obj;
+}
+```
+
 
 
 
